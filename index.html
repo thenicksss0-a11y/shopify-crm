@@ -239,9 +239,9 @@
     // ------------------------------
     const state = {
       settings: { api: '', token: '' },
-      shops: [], // {id, name}
-      products: [], // {id, shop, url, title, handle, active}
-      sales: [], // {product_id, date, total_sold}
+      shops: [],
+      products: [],
+      sales: [],
       lastFetch: null,
       charts: { top: null },
     };
@@ -254,7 +254,7 @@
     function loadSettings() {
       const s = localStorage.getItem('shopify_crm_settings');
       if (s) {
-        try { state.settings = JSON.parse(s); } catch { /* ignore */ }
+        try { state.settings = JSON.parse(s); } catch {}
       }
       document.getElementById('cfgApi').value = state.settings.api || '';
       document.getElementById('cfgToken').value = state.settings.token || '';
@@ -292,23 +292,52 @@
         return t ? `&token=${encodeURIComponent(t)}` : '';
       },
       async getData() {
-        const url = `${this.base()}?path=data${this.tokenParam()}`;
-        const res = await fetch(url);
-        if (!res.ok) throw new Error('Kan data niet ophalen. Controleer API URL/token.');
+        const url = `${this.base()}?path=data${this.tokenParam()}&_t=${Date.now()}`;
+        let res;
+        try {
+          res = await fetch(url, { method: 'GET', cache: 'no-store' });
+        } catch (networkErr) {
+          console.error('Network error (GET /data):', networkErr);
+          throw new Error('Failed to fetch (GET /data) — netwerk/CORS');
+        }
+        if (!res.ok) {
+          const txt = await res.text().catch(()=>'');
+          throw new Error(`GET ${res.status} ${res.statusText} — ${txt.slice(0,180)}`);
+        }
         return res.json();
       },
       async addProducts(shopName, urls) {
         const url = `${this.base()}?path=addProducts${this.tokenParam()}`;
         const body = { shopName, urls };
-        const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-        if (!res.ok) throw new Error('Toevoegen mislukt.');
+        let res;
+        try {
+          // Belangrijk: GEEN expliciete Content-Type header → geen preflight
+          res = await fetch(url, { method: 'POST', body: JSON.stringify(body) });
+        } catch (networkErr) {
+          console.error('Network error (POST addProducts):', networkErr);
+          throw new Error('Failed to fetch (POST addProducts) — netwerk/CORS');
+        }
+        if (!res.ok) {
+          const txt = await res.text().catch(()=>'');
+          throw new Error(`POST ${res.status} ${res.statusText} — ${txt.slice(0,180)}`);
+        }
         return res.json();
       },
       async syncNow(scope = 'all', ids = []) {
         const url = `${this.base()}?path=syncNow${this.tokenParam()}`;
         const body = { scope, ids };
-        const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-        if (!res.ok) throw new Error('Sync mislukt.');
+        let res;
+        try {
+          // Belangrijk: GEEN expliciete Content-Type header → geen preflight
+          res = await fetch(url, { method: 'POST', body: JSON.stringify(body) });
+        } catch (networkErr) {
+          console.error('Network error (POST syncNow):', networkErr);
+          throw new Error('Failed to fetch (POST syncNow) — netwerk/CORS');
+        }
+        if (!res.ok) {
+          const txt = await res.text().catch(()=>'');
+          throw new Error(`POST ${res.status} ${res.statusText} — ${txt.slice(0,180)}`);
+        }
         return res.json();
       }
     };
@@ -326,7 +355,7 @@
     }
 
     function latestTotalsByProduct(sales) {
-      const map = new Map(); // product_id -> latest
+      const map = new Map();
       for (const s of sales) {
         const key = s.product_id;
         const d = new Date(s.date);
@@ -334,11 +363,10 @@
           map.set(key, { total: Number(s.total_sold) || 0, dateObj: d });
         }
       }
-      return map; // product_id -> { total, dateObj }
+      return map;
     }
 
     function deltasByProduct(sales) {
-      // returns maps: 24h and 7d deltas based on consecutive points
       const perProd = new Map();
       for (const s of sales) {
         const pid = s.product_id;
@@ -397,7 +425,6 @@
       document.getElementById('kpi24h').textContent = fmt.format(totals.d24);
       document.getElementById('kpi7d').textContent = fmt.format(totals.d7);
 
-      // Quick list: top 5 (7d)
       const top5 = topProducts(enriched, '7d', 'all', 5);
       const ql = document.getElementById('quickList');
       ql.innerHTML = top5.map((p, i) => `
@@ -411,7 +438,6 @@
         </li>
       `).join('');
 
-      // Chart top 10 (7d)
       const top10 = topProducts(enriched, '7d', 'all', 10);
       const labels = top10.map(p => (p.title || p.handle || '—').slice(0,40));
       const values = top10.map(p => p.delta7 || 0);
@@ -420,14 +446,9 @@
       state.charts.top = new Chart(ctx, {
         type: 'bar',
         data: { labels, datasets: [{ label: 'Verkocht (7d)', data: values }] },
-        options: {
-          responsive: true,
-          plugins: { legend: { display: false } },
-          scales: { x: { ticks: { autoSkip: false } } }
-        }
+        options: { responsive: true, plugins: { legend: { display: false } }, scales: { x: { ticks: { autoSkip: false } } } }
       });
 
-      // Updated at
       const latestDates = enriched.map(p => p.lastDate).filter(Boolean).sort((a,b)=>b-a);
       setUpdatedAt(latestDates[0] || state.lastFetch);
     }
@@ -489,7 +510,6 @@
         </tr>
       `).join('');
 
-      // Fill lbShop select
       const lbShop = document.getElementById('lbShop');
       const cur = lbShop.value;
       lbShop.innerHTML = '<option value="all">Alle webshops</option>' + shops.map(s => `<option value="${s.name}">${s.name}</option>`).join('');
