@@ -1,0 +1,600 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Shopify Sales CRM</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    html, body { font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, "Helvetica Neue", Arial, "Apple Color Emoji", "Segoe UI Emoji"; }
+    .card { @apply bg-white rounded-2xl shadow-sm border border-slate-200; }
+    .btn { @apply inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed; }
+    .btn-outline { @apply bg-white text-slate-900 border border-slate-300 hover:bg-slate-50; }
+    .input { @apply rounded-xl border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-slate-400/30 w-full; }
+    .badge { @apply inline-flex items-center rounded-full bg-slate-100 text-slate-700 px-2.5 py-1 text-xs font-medium; }
+    .tab { @apply px-3 py-2 rounded-xl text-sm font-medium cursor-pointer hover:bg-slate-100; }
+    .tab-active { @apply bg-slate-900 text-white hover:bg-slate-900; }
+    .hidden { display: none; }
+    .table { @apply min-w-full text-left text-sm; }
+    .th { @apply px-4 py-3 font-semibold text-slate-600; }
+    .td { @apply px-4 py-3 text-slate-800; }
+  </style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+  <!-- Header -->
+  <header class="sticky top-0 z-10 bg-white/80 backdrop-blur border-b border-slate-200">
+    <div class="max-w-7xl mx-auto px-4 md:px-6 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-xl bg-slate-900/90 text-white flex items-center justify-center font-extrabold">SC</div>
+        <div>
+          <h1 class="text-lg font-bold">Shopify Sales CRM</h1>
+          <p class="text-xs text-slate-500">Dagelijkse unit-verkopen per productpagina</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <button id="syncNowBtn" class="btn" title="Nu synchroniseren">⟳ <span class="hidden sm:inline">Sync nu</span></button>
+        <button id="settingsBtn" class="btn-outline">⚙️ <span class="hidden sm:inline">Instellingen</span></button>
+      </div>
+    </div>
+    <div class="max-w-7xl mx-auto px-4 md:px-6 pb-2">
+      <nav class="flex items-center gap-2">
+        <button class="tab tab-active" data-tab="dashboard">Dashboard</button>
+        <button class="tab" data-tab="leaderboards">Leaderboards</button>
+        <button class="tab" data-tab="products">Producten</button>
+        <button class="tab" data-tab="shops">Webshops</button>
+        <button class="tab" data-tab="help">Help</button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 md:px-6 py-6 space-y-6">
+    <!-- Alerts -->
+    <div id="alert" class="hidden card p-4"></div>
+
+    <!-- DASHBOARD -->
+    <section id="tab-dashboard">
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div class="card p-4">
+          <div class="text-xs text-slate-500">Webshops</div>
+          <div id="kpiShops" class="text-3xl font-extrabold mt-1">–</div>
+        </div>
+        <div class="card p-4">
+          <div class="text-xs text-slate-500">Producten</div>
+          <div id="kpiProducts" class="text-3xl font-extrabold mt-1">–</div>
+        </div>
+        <div class="card p-4">
+          <div class="text-xs text-slate-500">Verkocht (24u)</div>
+          <div id="kpi24h" class="text-3xl font-extrabold mt-1">–</div>
+        </div>
+        <div class="card p-4">
+          <div class="text-xs text-slate-500">Verkocht (7 dagen)</div>
+          <div id="kpi7d" class="text-3xl font-extrabold mt-1">–</div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div class="card p-4 lg:col-span-2">
+          <div class="flex items-center justify-between mb-2">
+            <h2 class="font-semibold">Top 10 producten – laatste 7 dagen</h2>
+            <div class="text-xs text-slate-500" id="updatedAt"></div>
+          </div>
+          <canvas id="topChart" height="160"></canvas>
+        </div>
+        <div class="card p-4">
+          <h2 class="font-semibold mb-2">Snel overzicht</h2>
+          <ul id="quickList" class="space-y-2 text-sm"></ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- LEADERBOARDS -->
+    <section id="tab-leaderboards" class="hidden">
+      <div class="card p-4">
+        <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
+          <div>
+            <h2 class="font-semibold">Leaderboards</h2>
+            <p class="text-sm text-slate-600">Bekijk bestsellers per periode en per webshop of over alle webshops.</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <select id="lbRange" class="input w-44">
+              <option value="24h">Laatste 24u</option>
+              <option value="7d" selected>Laatste 7 dagen</option>
+              <option value="all">Altijd (totaal)</option>
+            </select>
+            <select id="lbShop" class="input w-56">
+              <option value="all" selected>Alle webshops</option>
+            </select>
+          </div>
+        </div>
+        <div class="overflow-x-auto mt-4">
+          <table class="table">
+            <thead>
+              <tr class="border-b border-slate-200">
+                <th class="th">#</th>
+                <th class="th">Product</th>
+                <th class="th">Webshop</th>
+                <th class="th">Verkocht</th>
+                <th class="th">Link</th>
+              </tr>
+            </thead>
+            <tbody id="lbBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- PRODUCTS -->
+    <section id="tab-products" class="hidden">
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div class="card p-4 lg:col-span-2">
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="font-semibold">Alle producten</h2>
+            <div class="flex gap-2">
+              <input id="prodSearch" class="input w-56" placeholder="Zoek op titel/URL..." />
+              <button id="refreshTableBtn" class="btn-outline">↻ Vernieuwen</button>
+            </div>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="table">
+              <thead>
+                <tr class="border-b border-slate-200">
+                  <th class="th">Titel</th>
+                  <th class="th">Webshop</th>
+                  <th class="th">Totaal verkocht</th>
+                  <th class="th">24u</th>
+                  <th class="th">7d</th>
+                  <th class="th">Acties</th>
+                </tr>
+              </thead>
+              <tbody id="productsBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card p-4">
+          <h2 class="font-semibold">Producten toevoegen</h2>
+          <p class="text-sm text-slate-600 mb-3">Plak één productlink per regel en geef de webshop een naam.</p>
+          <label class="text-sm font-medium">Webshopnaam</label>
+          <input id="addShopName" class="input mt-1 mb-3" placeholder="Bijv. Mijn Winkel" />
+          <label class="text-sm font-medium">Product-URL's (één per regel)</label>
+          <textarea id="addUrls" class="input mt-1 h-40"></textarea>
+          <div class="flex items-center gap-2 mt-3">
+            <button id="addProductsBtn" class="btn">➕ Toevoegen</button>
+            <button id="syncSelectedBtn" class="btn-outline">⟳ Sync geselecteerde</button>
+          </div>
+          <p class="text-xs text-slate-500 mt-3">Tip: je kunt later altijd de naam van de webshop wijzigen in de instellingen van je backend (Google Sheet).</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- SHOPS -->
+    <section id="tab-shops" class="hidden">
+      <div class="card p-4">
+        <div class="flex items-center justify-between mb-2">
+          <h2 class="font-semibold">Webshops</h2>
+          <button id="syncAllBtn" class="btn">⟳ Sync alle producten</button>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="table">
+            <thead>
+              <tr class="border-b border-slate-200">
+                <th class="th">Webshop</th>
+                <th class="th"># Producten</th>
+              </tr>
+            </thead>
+            <tbody id="shopsBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- HELP -->
+    <section id="tab-help" class="hidden">
+      <div class="card p-4 space-y-3">
+        <h2 class="font-semibold">Hoe werkt dit?</h2>
+        <ol class="list-decimal pl-5 text-sm text-slate-700 space-y-2">
+          <li>Stel eerst je <strong>API URL</strong> en <strong>API token</strong> in via <em>Instellingen</em> (rechtsboven). Deze komen uit je backend (Google Apps Script) volgens de stappen in de chat.</li>
+          <li>Voeg product-URL's toe bij <em>Producten → Producten toevoegen</em>.</li>
+          <li>Klik <em>Sync alle producten</em> om direct te meten, of wacht op de dagelijkse automatische run.</li>
+          <li>Bekijk prestaties op het <em>Dashboard</em> en in <em>Leaderboards</em>.</li>
+        </ol>
+        <p class="text-sm text-slate-600">Zonder backend kan deze pagina niet scrapen wegens browserbeperkingen (CORS). Volg de eenvoudige backend-stappen in de chat.</p>
+      </div>
+    </section>
+  </main>
+
+  <!-- Settings Modal -->
+  <div id="settingsModal" class="fixed inset-0 bg-black/30 hidden items-center justify-center p-4">
+    <div class="card w-full max-w-xl p-5">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="font-semibold text-lg">Instellingen</h3>
+        <button id="closeSettings" class="btn-outline">✕</button>
+      </div>
+      <div class="space-y-3">
+        <div>
+          <label class="text-sm font-medium">API basis-URL (Google Apps Script Web App)</label>
+          <input id="cfgApi" class="input mt-1" placeholder="https://script.google.com/macros/s/XXX/exec" />
+        </div>
+        <div>
+          <label class="text-sm font-medium">API token (zoals ingesteld in Script Properties)</label>
+          <input id="cfgToken" class="input mt-1" placeholder="jouw-geheime-token" />
+        </div>
+      </div>
+      <div class="flex items-center justify-between mt-4">
+        <div class="text-xs text-slate-500">Gegevens worden lokaal opgeslagen in je browser.</div>
+        <div class="flex gap-2">
+          <button id="testApiBtn" class="btn-outline">Test verbinding</button>
+          <button id="saveSettings" class="btn">Opslaan</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ------------------------------
+    // Config & Utilities
+    // ------------------------------
+    const state = {
+      settings: { api: '', token: '' },
+      shops: [], // {id, name}
+      products: [], // {id, shop, url, title, handle, active}
+      sales: [], // {product_id, date, total_sold}
+      lastFetch: null,
+      charts: { top: null },
+    };
+
+    const fmt = new Intl.NumberFormat('nl-NL');
+
+    function saveSettings() {
+      localStorage.setItem('shopify_crm_settings', JSON.stringify(state.settings));
+    }
+    function loadSettings() {
+      const s = localStorage.getItem('shopify_crm_settings');
+      if (s) {
+        try { state.settings = JSON.parse(s); } catch { /* ignore */ }
+      }
+      document.getElementById('cfgApi').value = state.settings.api || '';
+      document.getElementById('cfgToken').value = state.settings.token || '';
+    }
+
+    function showAlert(html, kind = 'info') {
+      const el = document.getElementById('alert');
+      el.classList.remove('hidden');
+      el.classList.toggle('border-l-4', true);
+      el.classList.toggle('border-blue-500', kind === 'info');
+      el.classList.toggle('border-amber-500', kind === 'warn');
+      el.classList.toggle('border-red-500', kind === 'error');
+      el.innerHTML = html;
+      setTimeout(() => el.classList.add('hidden'), 5200);
+    }
+
+    function setUpdatedAt(ts) {
+      const el = document.getElementById('updatedAt');
+      if (!ts) { el.textContent = ''; return; }
+      const d = new Date(ts);
+      el.textContent = `Laatst bijgewerkt: ${d.toLocaleString('nl-NL')}`;
+    }
+
+    // ------------------------------
+    // API Client
+    // ------------------------------
+    const api = {
+      base() {
+        const base = state.settings.api?.trim();
+        if (!base) throw new Error('API URL niet ingesteld. Klik op Instellingen.');
+        return base;
+      },
+      tokenParam() {
+        const t = state.settings.token?.trim();
+        return t ? `&token=${encodeURIComponent(t)}` : '';
+      },
+      async getData() {
+        const url = `${this.base()}?path=data${this.tokenParam()}`;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('Kan data niet ophalen. Controleer API URL/token.');
+        return res.json();
+      },
+      async addProducts(shopName, urls) {
+        const url = `${this.base()}?path=addProducts${this.tokenParam()}`;
+        const body = { shopName, urls };
+        const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        if (!res.ok) throw new Error('Toevoegen mislukt.');
+        return res.json();
+      },
+      async syncNow(scope = 'all', ids = []) {
+        const url = `${this.base()}?path=syncNow${this.tokenParam()}`;
+        const body = { scope, ids };
+        const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        if (!res.ok) throw new Error('Sync mislukt.');
+        return res.json();
+      }
+    };
+
+    // ------------------------------
+    // Data transforms
+    // ------------------------------
+    function buildShops(products) {
+      const map = new Map();
+      for (const p of products) {
+        const name = p.shop || 'Onbekend';
+        map.set(name, (map.get(name) || 0) + 1);
+      }
+      return Array.from(map.entries()).map(([name, count]) => ({ name, count }));
+    }
+
+    function latestTotalsByProduct(sales) {
+      const map = new Map(); // product_id -> latest
+      for (const s of sales) {
+        const key = s.product_id;
+        const d = new Date(s.date);
+        if (!map.has(key) || d > map.get(key).dateObj) {
+          map.set(key, { total: Number(s.total_sold) || 0, dateObj: d });
+        }
+      }
+      return map; // product_id -> { total, dateObj }
+    }
+
+    function deltasByProduct(sales) {
+      // returns maps: 24h and 7d deltas based on consecutive points
+      const perProd = new Map();
+      for (const s of sales) {
+        const pid = s.product_id;
+        if (!perProd.has(pid)) perProd.set(pid, []);
+        perProd.get(pid).push({ d: new Date(s.date), total: Number(s.total_sold) || 0 });
+      }
+      const now = new Date();
+      const d24 = new Map();
+      const d7 = new Map();
+      for (const [pid, arr] of perProd.entries()) {
+        arr.sort((a,b) => a.d - b.d);
+        let delta24 = 0, delta7 = 0;
+        for (let i = 1; i < arr.length; i++) {
+          const diff = Math.max(0, arr[i].total - arr[i-1].total);
+          const ageHours = (now - arr[i].d) / 36e5;
+          if (ageHours <= 24) delta24 += diff;
+          if (ageHours <= 24*7) delta7 += diff;
+        }
+        d24.set(pid, delta24);
+        d7.set(pid, delta7);
+      }
+      return { d24, d7 };
+    }
+
+    function enrichProducts(products, sales) {
+      const latest = latestTotalsByProduct(sales);
+      const { d24, d7 } = deltasByProduct(sales);
+      return products.map(p => ({
+        ...p,
+        total: latest.get(p.id)?.total ?? 0,
+        delta24: d24.get(p.id) ?? 0,
+        delta7: d7.get(p.id) ?? 0,
+        lastDate: latest.get(p.id)?.dateObj || null,
+      }));
+    }
+
+    function topProducts(enriched, range = '7d', shop = 'all', limit = 20) {
+      const arr = enriched.filter(p => shop === 'all' ? true : (p.shop === shop));
+      const key = range === 'all' ? 'total' : (range === '24h' ? 'delta24' : 'delta7');
+      return arr.sort((a,b) => (b[key]||0) - (a[key]||0)).slice(0, limit);
+    }
+
+    // ------------------------------
+    // Renderers
+    // ------------------------------
+    function renderDashboard() {
+      const enriched = enrichProducts(state.products, state.sales);
+      const shopStats = buildShops(state.products);
+      document.getElementById('kpiShops').textContent = fmt.format(shopStats.length);
+      document.getElementById('kpiProducts').textContent = fmt.format(state.products.length);
+      const totals = enriched.reduce((acc,p) => {
+        acc.d24 += p.delta24 || 0;
+        acc.d7 += p.delta7 || 0;
+        return acc;
+      }, { d24:0, d7:0 });
+      document.getElementById('kpi24h').textContent = fmt.format(totals.d24);
+      document.getElementById('kpi7d').textContent = fmt.format(totals.d7);
+
+      // Quick list: top 5 (7d)
+      const top5 = topProducts(enriched, '7d', 'all', 5);
+      const ql = document.getElementById('quickList');
+      ql.innerHTML = top5.map((p, i) => `
+        <li class="flex items-start gap-3">
+          <div class="badge">${i+1}</div>
+          <div class="min-w-0">
+            <div class="truncate font-medium">${p.title || p.handle || '—'}</div>
+            <div class="text-xs text-slate-500">${p.shop || ''}</div>
+          </div>
+          <div class="ml-auto font-semibold">${fmt.format(p.delta7 || 0)}</div>
+        </li>
+      `).join('');
+
+      // Chart top 10 (7d)
+      const top10 = topProducts(enriched, '7d', 'all', 10);
+      const labels = top10.map(p => (p.title || p.handle || '—').slice(0,40));
+      const values = top10.map(p => p.delta7 || 0);
+      const ctx = document.getElementById('topChart');
+      if (state.charts.top) { state.charts.top.destroy(); }
+      state.charts.top = new Chart(ctx, {
+        type: 'bar',
+        data: { labels, datasets: [{ label: 'Verkocht (7d)', data: values }] },
+        options: {
+          responsive: true,
+          plugins: { legend: { display: false } },
+          scales: { x: { ticks: { autoSkip: false } } }
+        }
+      });
+
+      // Updated at
+      const latestDates = enriched.map(p => p.lastDate).filter(Boolean).sort((a,b)=>b-a);
+      setUpdatedAt(latestDates[0] || state.lastFetch);
+    }
+
+    function renderLeaderboards() {
+      const range = document.getElementById('lbRange').value;
+      const shop = document.getElementById('lbShop').value;
+      const enriched = enrichProducts(state.products, state.sales);
+      const list = topProducts(enriched, range, shop, 50);
+      const tbody = document.getElementById('lbBody');
+      tbody.innerHTML = list.map((p, idx) => `
+        <tr class="border-b border-slate-100">
+          <td class="td">${idx+1}</td>
+          <td class="td">
+            <div class="font-medium truncate max-w-[420px]">${p.title || p.handle || '—'}</div>
+            <div class="text-xs text-slate-500 truncate max-w-[420px]">${p.url}</div>
+          </td>
+          <td class="td">${p.shop || ''}</td>
+          <td class="td font-semibold">${fmt.format(range==='all'? (p.total||0) : range==='24h' ? (p.delta24||0) : (p.delta7||0))}</td>
+          <td class="td"><a href="${p.url}" target="_blank" class="text-slate-700 underline">Open</a></td>
+        </tr>
+      `).join('');
+    }
+
+    function renderProductsTable() {
+      const enriched = enrichProducts(state.products, state.sales);
+      const q = document.getElementById('prodSearch').value.trim().toLowerCase();
+      const rows = enriched
+        .filter(p => !q || (p.title||'').toLowerCase().includes(q) || (p.url||'').toLowerCase().includes(q))
+        .sort((a,b)=> (b.delta7||0) - (a.delta7||0));
+      const tbody = document.getElementById('productsBody');
+      tbody.innerHTML = rows.map(p => `
+        <tr class="border-b border-slate-100">
+          <td class="td">
+            <div class="font-medium truncate max-w-[360px]">${p.title || p.handle || '—'}</div>
+            <div class="text-xs text-slate-500 truncate max-w-[360px]">${p.url}</div>
+          </td>
+          <td class="td">${p.shop || ''}</td>
+          <td class="td font-semibold">${fmt.format(p.total||0)}</td>
+          <td class="td">${fmt.format(p.delta24||0)}</td>
+          <td class="td">${fmt.format(p.delta7||0)}</td>
+          <td class="td">
+            <div class="flex items-center gap-2">
+              <a href="${p.url}" target="_blank" class="btn-outline text-xs">Open</a>
+              <button class="btn-outline text-xs" data-action="sync-one" data-id="${p.id}">Sync</button>
+            </div>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function renderShops() {
+      const shops = buildShops(state.products);
+      const tbody = document.getElementById('shopsBody');
+      tbody.innerHTML = shops.sort((a,b)=>b.count-a.count).map(s => `
+        <tr class="border-b border-slate-100">
+          <td class="td">${s.name}</td>
+          <td class="td">${fmt.format(s.count)}</td>
+        </tr>
+      `).join('');
+
+      // Fill lbShop select
+      const lbShop = document.getElementById('lbShop');
+      const cur = lbShop.value;
+      lbShop.innerHTML = '<option value="all">Alle webshops</option>' + shops.map(s => `<option value="${s.name}">${s.name}</option>`).join('');
+      lbShop.value = ['all', ...shops.map(s=>s.name)].includes(cur) ? cur : 'all';
+    }
+
+    // ------------------------------
+    // Load data
+    // ------------------------------
+    async function loadAll() {
+      try {
+        const data = await api.getData();
+        state.products = data.products || [];
+        state.sales = data.sales || [];
+        state.lastFetch = Date.now();
+        renderDashboard();
+        renderLeaderboards();
+        renderProductsTable();
+        renderShops();
+        showAlert('Data succesvol geladen.', 'info');
+      } catch (err) {
+        console.error(err);
+        showAlert('⚠️ '+err.message, 'warn');
+      }
+    }
+
+    // ------------------------------
+    // Events & UI
+    // ------------------------------
+    function bindTabs() {
+      const tabs = document.querySelectorAll('nav .tab');
+      tabs.forEach(t => t.addEventListener('click', () => {
+        tabs.forEach(x => x.classList.remove('tab-active'));
+        t.classList.add('tab-active');
+        const name = t.dataset.tab;
+        document.querySelectorAll('main section').forEach(sec => sec.classList.add('hidden'));
+        document.getElementById('tab-'+name).classList.remove('hidden');
+        if (name === 'leaderboards') renderLeaderboards();
+        if (name === 'products') renderProductsTable();
+      }));
+    }
+
+    function bindSettings() {
+      const modal = document.getElementById('settingsModal');
+      document.getElementById('settingsBtn').onclick = () => { modal.classList.remove('hidden'); modal.classList.add('flex'); };
+      document.getElementById('closeSettings').onclick = () => { modal.classList.add('hidden'); modal.classList.remove('flex'); };
+      document.getElementById('saveSettings').onclick = () => {
+        state.settings.api = document.getElementById('cfgApi').value.trim();
+        state.settings.token = document.getElementById('cfgToken').value.trim();
+        saveSettings();
+        modal.classList.add('hidden'); modal.classList.remove('flex');
+        loadAll();
+      };
+      document.getElementById('testApiBtn').onclick = async () => {
+        try { await api.getData(); showAlert('✅ Verbinding gelukt!', 'info'); }
+        catch(e){ showAlert('❌ Test mislukt: '+e.message, 'error'); }
+      }
+    }
+
+    function bindActions() {
+      document.getElementById('syncNowBtn').onclick = async () => {
+        try { showAlert('Synchroniseren gestart…'); await api.syncNow('all'); await loadAll(); }
+        catch(e){ showAlert('❌ '+e.message, 'error'); }
+      };
+      document.getElementById('syncAllBtn').onclick = async () => {
+        try { showAlert('Synchroniseren gestart…'); await api.syncNow('all'); await loadAll(); }
+        catch(e){ showAlert('❌ '+e.message, 'error'); }
+      };
+      document.getElementById('refreshTableBtn').onclick = () => renderProductsTable();
+      document.getElementById('lbRange').onchange = () => renderLeaderboards();
+      document.getElementById('lbShop').onchange = () => renderLeaderboards();
+      document.getElementById('prodSearch').oninput = () => renderProductsTable();
+
+      document.getElementById('addProductsBtn').onclick = async () => {
+        const shopName = document.getElementById('addShopName').value.trim();
+        const urls = document.getElementById('addUrls').value.split(/\n+/).map(s=>s.trim()).filter(Boolean);
+        if (!shopName || !urls.length) { showAlert('Vul een webshopnaam en minstens 1 URL in.', 'warn'); return; }
+        try {
+          const res = await api.addProducts(shopName, urls);
+          showAlert(`✅ ${res.added?.length || 0} producten toegevoegd.`);
+          document.getElementById('addUrls').value = '';
+          await loadAll();
+        } catch(e) { showAlert('❌ '+e.message, 'error'); }
+      };
+
+      document.getElementById('productsBody').addEventListener('click', async (e) => {
+        const btn = e.target.closest('button[data-action="sync-one"]');
+        if (!btn) return;
+        const id = Number(btn.dataset.id);
+        try { showAlert('Product synchroniseren…'); await api.syncNow('ids', [id]); await loadAll(); }
+        catch(err){ showAlert('❌ '+err.message, 'error'); }
+      });
+    }
+
+    // ------------------------------
+    // Init
+    // ------------------------------
+    (function init(){
+      bindTabs();
+      bindSettings();
+      bindActions();
+      loadSettings();
+      if (state.settings.api) loadAll();
+      else showAlert('⚙️ Stel je API URL/token in via Instellingen.', 'warn');
+    })();
+  </script>
+</body>
+</html>
